@@ -24,6 +24,16 @@
 
 #define VESC_TIMEOUT_MS      1000    /* Data ældre end dette regnes som tabt */
 
+/* De fem status-beskeder - hver værdi kommer fra én af dem */
+typedef enum {
+    VESC_STATUS_1,   /* ERPM, motorstrøm, duty */
+    VESC_STATUS_2,   /* Ah brugt / ladet */
+    VESC_STATUS_3,   /* Wh brugt / ladet */
+    VESC_STATUS_4,   /* Temperaturer, batteristrøm */
+    VESC_STATUS_5,   /* Tachometer, batterispænding */
+    VESC_STATUS_COUNT
+} vesc_status_t;
+
 typedef struct {
     float erpm;               /* Elektrisk RPM (STATUS_1) */
     float motor_current;      /* A, motorstrøm (STATUS_1) */
@@ -35,20 +45,27 @@ typedef struct {
     float temp_fet;           /* °C (STATUS_4) */
     float temp_motor;         /* °C (STATUS_4) */
     float current_in;         /* A, batteristrøm (STATUS_4) */
+    int32_t tachometer;       /* Motor-tæller, 6 pr. elektrisk omdrejning (STATUS_5) */
     float voltage_in;         /* V, batterispænding (STATUS_5) */
     int controller_id;        /* ID på den VESC der senest sendte */
-    unsigned int last_update_ms;
+    unsigned int rx_ms[VESC_STATUS_COUNT];  /* Hvornår hver status sidst kom (0 = aldrig) */
 } vesc_data_t;
 
 /* Fortolker en modtaget frame. Returnerer true hvis det var en VESC-status. */
 bool vesc_handle_msg(const can_msg_t *msg, unsigned int now_ms);
 
 const vesc_data_t *vesc_get(void);
+
+/* true hvis status-beskeden er modtaget inden for VESC_TIMEOUT_MS */
+bool vesc_fresh(vesc_status_t status, unsigned int now_ms);
+
+/* true hvis mindst én status-besked er frisk */
 bool vesc_is_alive(unsigned int now_ms);
 
 /* Afledte værdier til dashboardet */
-float vesc_speed_kmh(void);
-float vesc_power_w(void);
-float vesc_battery_percent(void);
+float vesc_speed_kmh(void);       /* STATUS_1 */
+float vesc_power_w(void);         /* STATUS_4 + STATUS_5 */
+float vesc_battery_percent(void); /* STATUS_2 */
+float vesc_trip_km(void);         /* STATUS_5 */
 
 #endif /* VESC_H */

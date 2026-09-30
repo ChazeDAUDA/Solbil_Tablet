@@ -11,8 +11,8 @@ Senere kommer et dashboard på skærmen med hastighed, batteri, effekt og lys- o
 ```
 include/   button.h   can_bus.h   lights.h   vesc.h   time_ms.h
 src/       button.c   can_bus.c   lights.c   vesc.c   main.c
-scripts/   setup_can.sh  setup_vcan.sh  solbil-tablet.service
-assets/    logo.png
+scripts/   setup_can.sh  setup_vcan.sh  fake_vesc.sh  solbil-tablet.service
+assets/    logo.png   fonts/ (Inter og JetBrains Mono, SIL Open Font License)
 ```
 
 | Modul    | Ansvar |
@@ -21,7 +21,8 @@ assets/    logo.png
 | `lights` | Protokol (kopi af `fdcan_driver.h`) og knaplogik (samme regler som `button.c` på STM32) |
 | `can_bus`| SocketCAN: sender og modtager klassiske CAN-frames |
 | `vesc`   | Fortolker VESC-status (fart, spænding, strøm, Ah, temperatur) |
-| `display`| Skærmen: indikatorlamper for lys (blinker med 500 ms som STM32) |
+| `display`| Dashboardet: hastighed, batteri, effekt, lysindikatorer, dato/tid |
+| `gfx`    | Tegne-hjælpere (afrundede kort, buer, cachet tekst) via GPU |
 | `main`   | Argumenter, opstart og loop der læser knapper og CAN hvert 10. ms |
 
 ## Knapper
@@ -67,10 +68,11 @@ Programmet printer VESC-data hvert sekund:
 sudo scripts/setup_vcan.sh
 ./build/solbil-tablet -i vcan0
 ```
-Kør i en anden terminal `candump vcan0` for at se lyskommandoerne. Du kan også sende en falsk VESC-status (controller-ID 10, 48,0 V) med:
+Kør i en anden terminal `candump vcan0` for at se lyskommandoerne. Du kan også sende falske VESC-data, så hele dashboardet fyldes ud:
 ```sh
-cansend vcan0 00001B0A#0000000001E00000
+scripts/fake_vesc.sh vcan0
 ```
+Felter uden data viser `NULL`.
 
 ## CAN-bus: klassisk CAN, ikke FD
 VESC 100/250 kan **ikke** CAN FD. Hvis der kommer FD-frames på bussen, sender VESC'en error frames, og så forstyrres hele bussen. Derfor kører hele bussen klassisk CAN med **1 Mbit/s**:
