@@ -1,0 +1,16 @@
+# Starter tabletten automatisk ved boot.
+# Installér:  sudo cp scripts/solbil-tablet.service /etc/systemd/system/
+#             sudo systemctl enable --now solbil-tablet
+[Unit]
+Description=Solbil touch tablet
+After=network.target
+
+[Service]
+ExecStartPre=/home/pi/solbil-tablet/scripts/setup_can.sh can0
+ExecStart=/home/pi/solbil-tablet/build/solbil-tablet -i can0
+WorkingDirectory=/home/pi/solbil-tablet
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
