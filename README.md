@@ -12,6 +12,7 @@ Senere kommer et dashboard på skærmen med hastighed, batteri, effekt og lys- o
 include/   button.h   can_bus.h   lights.h   vesc.h   time_ms.h
 src/       button.c   can_bus.c   lights.c   vesc.c   main.c
 scripts/   setup_can.sh  setup_vcan.sh  solbil-tablet.service
+assets/    logo.png
 ```
 
 | Modul    | Ansvar |
@@ -38,7 +39,7 @@ GND findes fx på fysisk pin 30, 34 eller 39. Pins ændres i tabellen i `src/but
 
 ## Byg og kør
 ```sh
-sudo apt install -y git build-essential can-utils libsdl2-dev libsdl2-ttf-dev fonts-dejavu-core
+sudo apt install -y git build-essential can-utils libsdl2-dev libsdl2-ttf-dev libsdl2-image-dev fonts-dejavu-core
 cd ~/solbil-tablet
 chmod +x scripts/*.sh
 make

@@ -2,6 +2,7 @@
 #include "lights.h"
 
 #include <SDL2/SDL.h>
+#include <SDL2/SDL_image.h>
 #include <SDL2/SDL_ttf.h>
 #include <stdio.h>
 
@@ -10,6 +11,10 @@ static const char *font_paths[] = {
     "/usr/share/fonts/TTF/DejaVuSans-Bold.ttf",
     NULL
 };
+
+/* Relativt til mappen med den eksekverbare fil (build/) */
+#define LOGO_PATH   "../assets/logo.png"
+#define LOGO_MARGIN 16
 
 static const SDL_Color COLOR_BG      = {  18,  18,  22, 255 };
 static const SDL_Color COLOR_LED_OFF = {  50,  52,  58, 255 };
@@ -39,7 +44,52 @@ static SDL_Window *window;
 static SDL_Renderer *renderer;
 static TTF_Font *font;
 static SDL_Texture *labels[LED_COUNT];
+static SDL_Texture *logo;
+static SDL_Rect logo_rect;
 static int screen_w, screen_h;
+
+/* Logoets sorte tekst er usynlig på mørk baggrund - farv mørke pixels lyse */
+static void lighten_dark_pixels(SDL_Surface *s)
+{
+    SDL_LockSurface(s);
+    for (int y = 0; y < s->h; y++) {
+        Uint32 *row = (Uint32 *)((Uint8 *)s->pixels + y * s->pitch);
+        for (int x = 0; x < s->w; x++) {
+            Uint8 r, g, b, a;
+            SDL_GetRGBA(row[x], s->format, &r, &g, &b, &a);
+            if (a > 0 && r < 90 && g < 90 && b < 90)
+                row[x] = SDL_MapRGBA(s->format, COLOR_TEXT.r, COLOR_TEXT.g, COLOR_TEXT.b, a);
+        }
+    }
+    SDL_UnlockSurface(s);
+}
+
+/* Logoet er pynt - mangler det, kører programmet videre uden */
+static void load_logo(void)
+{
+    char path[512];
+    char *base = SDL_GetBasePath();
+    snprintf(path, sizeof path, "%s%s", base ? base : "./", LOGO_PATH);
+    SDL_free(base);
+
+    SDL_Surface *loaded = IMG_Load(path);
+    if (!loaded) {
+        fprintf(stderr, "[skærm] kunne ikke indlæse logo (%s): %s\n", path, IMG_GetError());
+        return;
+    }
+    SDL_Surface *s = SDL_ConvertSurfaceFormat(loaded, SDL_PIXELFORMAT_RGBA32, 0);
+    SDL_FreeSurface(loaded);
+    if (!s)
+        return;
+
+    lighten_dark_pixels(s);
+    logo = SDL_CreateTextureFromSurface(renderer, s);
+
+    /* Øverste venstre hjørne, 1/6 af skærmhøjden, samme højde/bredde-forhold */
+    int h = screen_h / 6;
+    logo_rect = (SDL_Rect){ LOGO_MARGIN, LOGO_MARGIN, s->w * h / s->h, h };
+    SDL_FreeSurface(s);
+}
 
 static int load_labels(void)
 {
@@ -71,6 +121,8 @@ int display_init(bool fullscreen)
         fprintf(stderr, "[skærm] TTF_Init: %s\n", TTF_GetError());
         return -1;
     }
+    if (!(IMG_Init(IMG_INIT_PNG) & IMG_INIT_PNG))
+        fprintf(stderr, "[skærm] IMG_Init: %s\n", IMG_GetError());
 
     Uint32 flags = fullscreen ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0;
     window = SDL_CreateWindow("Solbil", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
@@ -91,6 +143,7 @@ int display_init(bool fullscreen)
 
     SDL_GetRendererOutputSize(renderer, &screen_w, &screen_h);
     printf("[skærm] %dx%d\n", screen_w, screen_h);
+    load_logo();
     return load_labels();
 }
 
@@ -127,6 +180,9 @@ void display_draw(unsigned int now_ms)
     SDL_SetRenderDrawColor(renderer, COLOR_BG.r, COLOR_BG.g, COLOR_BG.b, 255);
     SDL_RenderClear(renderer);
 
+    if (logo)
+        SDL_RenderCopy(renderer, logo, NULL, &logo_rect);
+
     int cell = screen_w / LED_COUNT;
     int r = SDL_min(cell, screen_h) / 4;
     int cy = screen_h / 2;
@@ -153,12 +209,15 @@ void display_close(void)
         if (labels[i])
             SDL_DestroyTexture(labels[i]);
     }
+    if (logo)
+        SDL_DestroyTexture(logo);
     if (font)
         TTF_CloseFont(font);
     if (renderer)
         SDL_DestroyRenderer(renderer);
     if (window)
         SDL_DestroyWindow(window);
+    IMG_Quit();
     TTF_Quit();
     SDL_Quit();
 }
