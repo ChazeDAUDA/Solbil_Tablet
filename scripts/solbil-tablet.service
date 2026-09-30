@@ -2,13 +2,13 @@
 # Installér:  sudo cp scripts/solbil-tablet.service /etc/systemd/system/
 #             sudo systemctl enable --now solbil-tablet
 [Unit]
-Description=Solbil touch tablet
+Description=Solbil knapper og CAN
 After=network.target
 
 [Service]
-ExecStartPre=/home/pi/solbil-tablet/scripts/setup_can.sh can0
-ExecStart=/home/pi/solbil-tablet/build/solbil-tablet -i can0
-WorkingDirectory=/home/pi/solbil-tablet
+ExecStartPre=/home/solarcarpi/solbil-tablet/scripts/setup_can.sh can0
+ExecStart=/home/solarcarpi/solbil-tablet/build/solbil-tablet -i can0
+WorkingDirectory=/home/solarcarpi/solbil-tablet
 Restart=on-failure
 RestartSec=2
 

@@ -2,14 +2,14 @@
 #define LIGHTS_H
 
 #include <stdbool.h>
-#include <stdint.h>
 
 /*
  * Protokol - SKAL matche fdcan_driver.h i Solbil_rearlights.
- * Hver besked er en 16-byte CAN FD frame: byte 0 = lightID, byte 1 = command.
+ * Pi'en sender klassiske 8-byte frames (VESC kan ikke CAN FD); STM32 læser kun
+ * byte 0 = lightID og byte 1 = command.
  */
 #define CANFD_LIGHT_CMD_ID      0x123
-#define CANFD_LIGHT_MSG_LEN     16
+#define CANFD_LIGHT_MSG_LEN     8
 
 #define LIGHT_CMD_OFF           0x00
 #define LIGHT_CMD_ON            0x01
@@ -23,33 +23,29 @@
 #define LIGHT_ID_BRAKE          0x04
 #define LIGHT_ID_HAZARD         0x05
 
-/* Knapperne på skærmen */
+/* Samme blinkinterval som BLINK_INTERVAL_MS i fdcan_driver.c */
+#define BLINK_INTERVAL_MS       500
+
 typedef enum {
-    LIGHT_TURN_LEFT,
-    LIGHT_HAZARD,
-    LIGHT_TURN_RIGHT,
     LIGHT_RUNNING,
     LIGHT_BRAKE,
+    LIGHT_TURN_LEFT,
+    LIGHT_TURN_RIGHT,
+    LIGHT_HAZARD,
     LIGHT_COUNT
 } light_t;
 
-typedef struct {
-    const char *label;   /* Tekst på knappen */
-    bool momentary;      /* Tændt så længe knappen holdes (bremse) */
-    bool blinking;       /* Knappen blinker på skærmen når den er aktiv */
-} light_def_t;
-
-const light_def_t *lights_get(light_t light);
+const char *lights_label(light_t light);
 bool lights_is_on(light_t light);
 
-/* false hvis knappen ikke har nogen effekt lige nu (fx blink uden kørelys) */
-bool lights_is_enabled(light_t light);
+/* true hvis blinklys/havari er i den tændte halvdel af blinket lige nu */
+bool lights_blink_phase(unsigned int now_ms);
 
-/* Kaldes når en knap trykkes ned / slippes. Logikken følger button.c. */
+/* Kaldes når en knap trykkes ned / slippes. Logikken følger button.c på STM32. */
 void lights_press(light_t light);
 void lights_release(light_t light);
 
-/* Slukker alt på printet, så det matcher skærmen ved opstart. */
+/* Slukker alt på printet, så det matcher Pi'ens tilstand ved opstart. */
 void lights_reset(void);
 
 #endif /* LIGHTS_H */

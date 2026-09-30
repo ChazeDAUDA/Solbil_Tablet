@@ -3,7 +3,7 @@ BUILD   := build
 
 CC      := gcc
 CFLAGS  := -std=gnu11 -Wall -Wextra -O2 -Iinclude $(shell sdl2-config --cflags)
-LDLIBS  := $(shell sdl2-config --libs) -lSDL2_ttf
+LDLIBS  := $(shell sdl2-config --libs) -lSDL2_ttf -lm
 
 SRCS    := $(wildcard src/*.c)
 OBJS    := $(SRCS:src/%.c=$(BUILD)/%.o)
@@ -23,7 +23,7 @@ run: all
 	./$(BUILD)/$(TARGET)
 
 dry: all
-	./$(BUILD)/$(TARGET) -n -w
+	./$(BUILD)/$(TARGET) -n
 
 clean:
 	rm -rf $(BUILD)
