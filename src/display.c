@@ -70,6 +70,7 @@ static SDL_Color with_alpha(SDL_Color c, Uint8 a)
 #define LEFT_X       36
 #define RIGHT_X      (W - 36 - COL_W)
 #define CARD_R       14
+#define LOGO_H       58
 
 #define GAUGE_CX     640
 #define GAUGE_CY     372
@@ -262,8 +263,7 @@ static void draw_icon(icon_t icon, float cx, float cy, SDL_Color c)
         gfx_line(cx - 5, cy + 5, cx, cy - 4, lw, c);
         break;
     case ICON_BRAKE:
-        gfx_stroke_circle(cx, cy, 9, c);
-        gfx_stroke_circle(cx, cy, 8.4f, c);
+        gfx_arc(cx, cy, 8, 10, 0, 360, c, c);
         gfx_line(cx, cy - 5, cx, cy + 1.5f, lw, c);
         gfx_fill_circle(cx, cy + 4.5f, 1.3f, c);
         break;
@@ -301,7 +301,7 @@ static void draw_card_icon(const box_t *b, SDL_Color fg, SDL_Color bg, int kind)
         break;
     case 3: /* Termometer */
         gfx_line(cx, cy - 8, cx, cy + 3, lw, fg);
-        gfx_stroke_circle(cx, cy + 5.5f, 3.5f, fg);
+        gfx_arc(cx, cy + 5.5f, 2.6f, 4.4f, 0, 360, fg, fg);
         gfx_line(cx + 3, cy - 5, cx + 6, cy - 5, 1.4f, fg);
         gfx_line(cx + 3, cy - 1, cx + 6, cy - 1, 1.4f, fg);
         break;
@@ -622,6 +622,43 @@ static void draw_topbar(void)
 
 /* ─── Offentlige funktioner ──────────────────── */
 
+/*
+ * Nedskalering med gennemsnit over alle kildepixels pr. målpixel (box filter).
+ * Farverne vægtes med alpha, så gennemsigtige pixels ikke giver mørke kanter.
+ */
+static SDL_Surface *downscale(SDL_Surface *src, int dw, int dh)
+{
+    SDL_Surface *dst = SDL_CreateRGBSurfaceWithFormat(0, dw, dh, 32, SDL_PIXELFORMAT_RGBA32);
+    if (!dst)
+        return NULL;
+
+    for (int dy = 0; dy < dh; dy++) {
+        int sy0 = dy * src->h / dh, sy1 = SDL_max((dy + 1) * src->h / dh, sy0 + 1);
+        Uint8 *out = (Uint8 *)dst->pixels + dy * dst->pitch;
+
+        for (int dx = 0; dx < dw; dx++, out += 4) {
+            int sx0 = dx * src->w / dw, sx1 = SDL_max((dx + 1) * src->w / dw, sx0 + 1);
+            unsigned long r = 0, g = 0, b = 0, a = 0, n = 0;
+
+            for (int sy = sy0; sy < sy1; sy++) {
+                const Uint8 *p = (const Uint8 *)src->pixels + sy * src->pitch + sx0 * 4;
+                for (int sx = sx0; sx < sx1; sx++, p += 4) {
+                    r += p[0] * p[3];
+                    g += p[1] * p[3];
+                    b += p[2] * p[3];
+                    a += p[3];
+                    n++;
+                }
+            }
+            out[0] = a ? (Uint8)(r / a) : 0;
+            out[1] = a ? (Uint8)(g / a) : 0;
+            out[2] = a ? (Uint8)(b / a) : 0;
+            out[3] = (Uint8)(a / n);
+        }
+    }
+    return dst;
+}
+
 static void load_logo(void)
 {
     char path[512];
@@ -637,23 +674,36 @@ static void load_logo(void)
     if (!s)
         return;
 
-    /* Logoets sorte tekst er usynlig på mørk baggrund - farv mørke pixels lyse */
+    /*
+     * Logoets sorte tekst er usynlig på mørk baggrund. Alle grå/sorte pixels (også de
+     * halvgennemsigtige kanter) farves lyse; det orange har høj farvemætning og bevares.
+     */
     SDL_LockSurface(s);
     for (int y = 0; y < s->h; y++) {
-        Uint32 *row = (Uint32 *)((Uint8 *)s->pixels + y * s->pitch);
-        for (int x = 0; x < s->w; x++) {
-            Uint8 r, g, b, a;
-            SDL_GetRGBA(row[x], s->format, &r, &g, &b, &a);
-            if (a > 0 && r < 90 && g < 90 && b < 90)
-                row[x] = SDL_MapRGBA(s->format, C_TEXT.r, C_TEXT.g, C_TEXT.b, a);
+        Uint8 *p = (Uint8 *)s->pixels + y * s->pitch;
+        for (int x = 0; x < s->w; x++, p += 4) {
+            int mx = SDL_max(p[0], SDL_max(p[1], p[2]));
+            int mn = SDL_min(p[0], SDL_min(p[1], p[2]));
+            if (p[3] > 0 && mx - mn < 40) {
+                p[0] = C_TEXT.r;
+                p[1] = C_TEXT.g;
+                p[2] = C_TEXT.b;
+            }
         }
     }
     SDL_UnlockSurface(s);
 
-    logo = SDL_CreateTextureFromSurface(renderer, s);
-    float h = 56;
-    logo_rect = (SDL_FRect){ LEFT_X, (TOPBAR_H - h) / 2, s->w * h / s->h, h };
+    /* Skalér ned én gang i god kvalitet - GPU'ens skalering giver takkede kanter ved så stor forskel */
+    int h = LOGO_H;
+    int w = s->w * h / s->h;
+    SDL_Surface *small = downscale(s, w, h);
     SDL_FreeSurface(s);
+    if (!small)
+        return;
+
+    logo = SDL_CreateTextureFromSurface(renderer, small);
+    logo_rect = (SDL_FRect){ LEFT_X, (TOPBAR_H - h) / 2.0f, (float)w, (float)h };
+    SDL_FreeSurface(small);
 }
 
 static int load_fonts(void)
@@ -758,6 +808,32 @@ static void approach(float *value, float target)
     *value += (target - *value) * SMOOTHING;
 }
 
+/*
+ * Hvis vinduet ikke har samme form som 1280x800, lægger SDL tomme kanter rundt om
+ * dashboardet. Fyld dem med baggrunden og forlæng top- og bundbjælken ud til kanten.
+ */
+static void fill_borders(void)
+{
+    int ow, oh;
+    SDL_GetRendererOutputSize(renderer, &ow, &oh);
+    float scale = fminf((float)ow / W, (float)oh / H);
+    float oy = (oh - H * scale) / 2;
+
+    SDL_RenderSetLogicalSize(renderer, 0, 0);   /* Tegn i vinduets egne pixels */
+
+    SDL_SetRenderDrawColor(renderer, C_BG.r, C_BG.g, C_BG.b, 255);
+    SDL_RenderClear(renderer);
+    SDL_SetRenderDrawColor(renderer, C_BAR_BG.r, C_BAR_BG.g, C_BAR_BG.b, 255);
+    SDL_RenderFillRectF(renderer, &(SDL_FRect){ 0, 0, (float)ow, oy + TOPBAR_H * scale });
+    float by = oy + BOTTOMBAR_Y * scale;
+    SDL_RenderFillRectF(renderer, &(SDL_FRect){ 0, by, (float)ow, oh - by });
+    SDL_SetRenderDrawColor(renderer, C_DIVIDER.r, C_DIVIDER.g, C_DIVIDER.b, 255);
+    SDL_RenderDrawLineF(renderer, 0, oy + TOPBAR_H * scale, (float)ow, oy + TOPBAR_H * scale);
+    SDL_RenderDrawLineF(renderer, 0, by, (float)ow, by);
+
+    SDL_RenderSetLogicalSize(renderer, W, H);
+}
+
 void display_draw(unsigned int now_ms)
 {
     if (now_ms - last_text_ms >= TEXT_REFRESH_MS) {
@@ -772,6 +848,7 @@ void display_draw(unsigned int now_ms)
     approach(&anim_power, target_power);
     approach(&anim_balance, target_balance);
 
+    fill_borders();
     if (background)
         SDL_RenderCopy(renderer, background, NULL, NULL);
     else
