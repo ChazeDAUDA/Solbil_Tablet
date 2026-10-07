@@ -33,10 +33,10 @@ Hver knap forbindes mellem GPIO-benet og **GND**. Pi'ens interne pull-up bruges,
 | Kørelys    | GPIO 5    | 29         | Tryk = tænd/sluk. Slukker også blinklys |
 | Bremse     | GPIO 6    | 31         | Tændt så længe knappen holdes |
 | Blink V    | GPIO 13   | 33         | Tryk = tænd/sluk. Kræver kørelys, virker ikke under havari |
-| Blink H    | GPIO 19   | 35         | Som Blink V |
+| Blink H    | GPIO 22   | 15         | Som Blink V |
 | Havari     | GPIO 26   | 37         | Tryk = tænd/sluk. Slukker blinklys |
 
-GND findes fx på fysisk pin 30, 34 eller 39. Pins ændres i tabellen i `src/button.c`. SPI0 (GPIO 8-11) og GPIO 25 er holdt fri til en CAN HAT.
+GND findes fx på fysisk pin 14, 30, 34 eller 39. Pins ændres i tabellen i `src/button.c`. Benene holder CAN HAT'en fri: SPI0 (GPIO 8-11), SPI1 (GPIO 18-21) og interrupts (GPIO 24-25).
 
 ## Byg og kør
 ```sh
@@ -96,12 +96,14 @@ Motorens polpar, gearing, hjuldiameter og batterikapacitet sættes øverst i `in
 
 ## CAN-hardware
 Raspberry Pi 3B+ har **ingen indbygget CAN-controller**, så I skal bruge en af følgende:
-- En CAN FD HAT med MCP2518FD (fx Waveshare 2-CH CAN FD HAT). Tilføj i `/boot/firmware/config.txt`:
+- **Valgt:** Waveshare 2-CH CAN FD HAT (2× MCP2518FD, isoleret). Standard "Mode A" bruger SPI0 + SPI1. Tilføj i `/boot/firmware/config.txt`:
   ```
   dtparam=spi=on
+  dtoverlay=spi1-3cs
   dtoverlay=mcp251xfd,spi0-0,interrupt=25
+  dtoverlay=mcp251xfd,spi1-0,interrupt=24
   ```
-  (Interrupt-pin og oscillator afhænger af HAT'en, så tjek databladet.)
+  Så kommer kanalerne op som `can0` og `can1`. VESC'en kan ikke CAN FD, så der skal være to busser: én CAN FD til STM32 og én klassisk til VESC'en.
 - Eller en USB-adapter med CAN FD-understøttelse (fx PEAK PCAN-USB FD eller candleLight FD).
 
 ## Protokol (fra Solbil_rearlights)

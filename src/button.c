@@ -20,12 +20,15 @@ typedef struct {
     unsigned int last_change;
 } button_t;
 
-/* GPIO 5-26 er valgt, så SPI0 (CAN HAT) og I2C holdes fri */
+/*
+ * Benene holder Waveshare 2-CH CAN FD HAT fri: SPI0 (GPIO 8-11), SPI1 (GPIO 18-21)
+ * og interrupts (GPIO 24-25). I2C (GPIO 2-3) er også fri.
+ */
 static button_t buttons[] = {
     {  5, LIGHT_RUNNING,    false, false, 0 },   /* Fysisk pin 29 */
     {  6, LIGHT_BRAKE,      false, false, 0 },   /* Fysisk pin 31 */
     { 13, LIGHT_TURN_LEFT,  false, false, 0 },   /* Fysisk pin 33 */
-    { 19, LIGHT_TURN_RIGHT, false, false, 0 },   /* Fysisk pin 35 */
+    { 22, LIGHT_TURN_RIGHT, false, false, 0 },   /* Fysisk pin 15 */
     { 26, LIGHT_HAZARD,     false, false, 0 },   /* Fysisk pin 37 */
 };
 
