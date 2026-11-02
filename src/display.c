@@ -56,6 +56,9 @@ static const SDL_Color C_AMBER       = { 255, 176,  32, 255 };
 static const SDL_Color C_AMBER_BG    = {  62,  44,  12, 255 };
 static const SDL_Color C_RED         = { 240,  72,  72, 255 };
 static const SDL_Color C_RED_BG      = {  64,  22,  24, 255 };
+/* Grøn til nærlys/tågelys og blå til fjernlys, som de normale symboler i en bil (ISO 2575) */
+static const SDL_Color C_GREEN       = {  72, 214, 104, 255 };
+static const SDL_Color C_GREEN_BG    = {  20,  56,  32, 255 };
 
 static SDL_Color with_alpha(SDL_Color c, Uint8 a)
 {
@@ -95,7 +98,9 @@ static const box_t card_power   = { RIGHT_X, 266, COL_W, 150 };
 static const box_t card_balance = { RIGHT_X, 432, COL_W, 206 };
 
 /* Indikatorer i bunden */
-typedef enum { ICON_ARROW_LEFT, ICON_ARROW_RIGHT, ICON_HEADLIGHT, ICON_HAZARD, ICON_BRAKE } icon_t;
+typedef enum {
+    ICON_ARROW_LEFT, ICON_ARROW_RIGHT, ICON_LOW_BEAM, ICON_HIGH_BEAM, ICON_FOG, ICON_HAZARD, ICON_BRAKE
+} icon_t;
 
 typedef struct {
     const char *label;
@@ -104,14 +109,19 @@ typedef struct {
     SDL_Color on, on_bg;
 } tile_t;
 
-enum { TILE_LEFT, TILE_RUNNING, TILE_HAZARD, TILE_BRAKE, TILE_RIGHT, TILE_COUNT };
+enum { TILE_LEFT, TILE_RUNNING, TILE_HIGH_BEAM, TILE_HAZARD, TILE_FOG, TILE_BRAKE, TILE_RIGHT, TILE_COUNT };
+
+#define TILE_X_LEFT(n)  (36 + (n) * (TILE_W + 12.0f))               /* n-te felt fra venstre kant */
+#define TILE_X_RIGHT(n) (W - 36 - TILE_W - (n) * (TILE_W + 12.0f))  /* n-te felt fra højre kant */
 
 static const tile_t tiles[TILE_COUNT] = {
-    [TILE_LEFT]    = { "VENSTRE BLINK", ICON_ARROW_LEFT,  36,                  C_TEAL,  C_TEAL_BG  },
-    [TILE_RUNNING] = { "KØRELYS",       ICON_HEADLIGHT,   152,                 C_BLUE,  C_BLUE_BG  },
-    [TILE_HAZARD]  = { "HAVARI",        ICON_HAZARD,      (W - TILE_W) / 2.0f, C_AMBER, C_AMBER_BG },
-    [TILE_BRAKE]   = { "BREMSE",        ICON_BRAKE,       W - 36 - 2 * TILE_W - 12, C_RED, C_RED_BG },
-    [TILE_RIGHT]   = { "HØJRE BLINK",   ICON_ARROW_RIGHT, W - 36 - TILE_W,     C_TEAL,  C_TEAL_BG  },
+    [TILE_LEFT]      = { "VENSTRE BLINK", ICON_ARROW_LEFT,  TILE_X_LEFT(0),      C_TEAL,  C_TEAL_BG  },
+    [TILE_RUNNING]   = { "KØRELYS",       ICON_LOW_BEAM,    TILE_X_LEFT(1),      C_GREEN, C_GREEN_BG },
+    [TILE_HIGH_BEAM] = { "FJERNLYS",      ICON_HIGH_BEAM,   TILE_X_LEFT(2),      C_BLUE,  C_BLUE_BG  },
+    [TILE_HAZARD]    = { "HAVARI",        ICON_HAZARD,      (W - TILE_W) / 2.0f, C_AMBER, C_AMBER_BG },
+    [TILE_FOG]       = { "TÅGELYS",       ICON_FOG,         TILE_X_RIGHT(2),     C_GREEN, C_GREEN_BG },
+    [TILE_BRAKE]     = { "BREMSE",        ICON_BRAKE,       TILE_X_RIGHT(1),     C_RED,   C_RED_BG   },
+    [TILE_RIGHT]     = { "HØJRE BLINK",   ICON_ARROW_RIGHT, TILE_X_RIGHT(0),     C_TEAL,  C_TEAL_BG  },
 };
 
 /* ─── Fonte ──────────────────────────────────── */
@@ -242,16 +252,26 @@ static void draw_icon(icon_t icon, float cx, float cy, SDL_Color c)
         gfx_line(cx + 11 * d, cy, cx + 3 * d, cy + 8, lw, c);
         break;
     }
-    case ICON_HEADLIGHT: {
+    case ICON_LOW_BEAM:
+    case ICON_HIGH_BEAM:
+    case ICON_FOG: {
         /* "D"-formet lygte med lysstråler til venstre */
-        float lx = cx + 1;
+        float lx = cx + 3;
         for (int i = 0; i < 8; i++) {
             float a0 = (-90 + 22.5f * i) * (float)M_PI / 180, a1 = (-90 + 22.5f * (i + 1)) * (float)M_PI / 180;
             gfx_line(lx + 9 * cosf(a0), cy + 9 * sinf(a0), lx + 9 * cosf(a1), cy + 9 * sinf(a1), lw, c);
         }
         gfx_line(lx, cy - 9, lx, cy + 9, lw, c);
+        /* Nærlys: stråler skråt nedad. Fjernlys og tågelys: vandrette stråler */
+        float drop = (icon == ICON_LOW_BEAM) ? 4.0f : 0.0f;
         for (int i = -1; i <= 1; i++)
-            gfx_line(cx - 14, cy + i * 6, cx - 5, cy + i * 6, lw, c);
+            gfx_line(cx - 4, cy + i * 6, cx - 14, cy + i * 6 + drop, lw, c);
+        /* Tågelys: bølget streg på tværs af strålerne */
+        if (icon == ICON_FOG) {
+            gfx_line(cx - 9, cy - 10, cx - 7, cy - 4, 1.8f, c);
+            gfx_line(cx - 7, cy - 4, cx - 11, cy + 2, 1.8f, c);
+            gfx_line(cx - 11, cy + 2, cx - 9, cy + 10, 1.8f, c);
+        }
         break;
     }
     case ICON_HAZARD:
@@ -594,6 +614,8 @@ static void draw_tiles(unsigned int now)
     bool lit[TILE_COUNT] = {
         [TILE_LEFT]    = (lights_is_on(LIGHT_TURN_LEFT) || hazard) && phase,
         [TILE_RUNNING] = lights_is_on(LIGHT_RUNNING),
+        [TILE_HIGH_BEAM] = lights_is_on(LIGHT_HIGH_BEAM),
+        [TILE_FOG]     = lights_is_on(LIGHT_FOG),
         [TILE_HAZARD]  = hazard && phase,
         [TILE_BRAKE]   = lights_is_on(LIGHT_BRAKE),
         [TILE_RIGHT]   = (lights_is_on(LIGHT_TURN_RIGHT) || hazard) && phase,

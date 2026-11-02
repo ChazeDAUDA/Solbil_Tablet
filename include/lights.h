@@ -22,6 +22,8 @@
 #define LIGHT_ID_TURN_RIGHT     0x03
 #define LIGHT_ID_BRAKE          0x04
 #define LIGHT_ID_HAZARD         0x05
+#define LIGHT_ID_HIGH_BEAM      0x06
+#define LIGHT_ID_FOG_LIGHT      0x07
 
 /*
  * Samme blinkinterval som BLINK_INTERVAL_MS i fdcan_driver.c.
@@ -42,6 +44,8 @@ typedef enum {
     LIGHT_TURN_LEFT,
     LIGHT_TURN_RIGHT,
     LIGHT_HAZARD,
+    LIGHT_HIGH_BEAM,
+    LIGHT_FOG,
     LIGHT_COUNT
 } light_t;
 

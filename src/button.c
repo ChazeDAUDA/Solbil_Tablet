@@ -21,7 +21,7 @@ typedef struct {
 } button_t;
 
 /*
- * Benene holder Waveshare 2-CH CAN FD HAT fri: SPI0 (GPIO 8-11), SPI1 (GPIO 18-21)
+ * Benene holder Waveshare 2-CH CAN FD HAT fri: SPI0 (GPIO 7-11), SPI1 (GPIO 16-21)
  * og interrupts (GPIO 24-25). I2C (GPIO 2-3) er også fri.
  */
 static button_t buttons[] = {
@@ -30,6 +30,8 @@ static button_t buttons[] = {
     { 13, LIGHT_TURN_LEFT,  false, false, 0 },   /* Fysisk pin 33 */
     { 22, LIGHT_TURN_RIGHT, false, false, 0 },   /* Fysisk pin 15 */
     { 26, LIGHT_HAZARD,     false, false, 0 },   /* Fysisk pin 37 */
+    { 27, LIGHT_HIGH_BEAM,  false, false, 0 },   /* Fysisk pin 13 */
+    { 23, LIGHT_FOG,        false, false, 0 },   /* Fysisk pin 16 */
 };
 
 #define BUTTON_COUNT (sizeof buttons / sizeof buttons[0])

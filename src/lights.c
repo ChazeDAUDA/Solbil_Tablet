@@ -12,6 +12,8 @@ static const char *labels[LIGHT_COUNT] = {
     [LIGHT_TURN_LEFT]  = "Blink V",
     [LIGHT_TURN_RIGHT] = "Blink H",
     [LIGHT_HAZARD]     = "Havari",
+    [LIGHT_HIGH_BEAM]  = "Fjernlys",
+    [LIGHT_FOG]        = "Tågelys",
 };
 
 /* state[LIGHT_BRAKE] er bremselysets faktiske tilstand = pedal ELLER regenerering */
@@ -55,6 +57,15 @@ static void set_right(bool on)
     send_cmd(LIGHT_ID_TURN_RIGHT, on ? LIGHT_CMD_BLINK_RIGHT : LIGHT_CMD_OFF);
 }
 
+/* Tænd/sluk et lys uden blink. Sender kun, hvis tilstanden ændrer sig. */
+static void set_simple(light_t light, uint8_t light_id, bool on)
+{
+    if (state[light] == on)
+        return;
+    state[light] = on;
+    send_cmd(light_id, on ? LIGHT_CMD_ON : LIGHT_CMD_OFF);
+}
+
 /* Bremselyset er tændt når pedalen er trykket eller der regenereres. Returnerer true ved ændring. */
 static bool update_brake(void)
 {
@@ -87,6 +98,19 @@ void lights_press(light_t light)
     case LIGHT_RUNNING:
         state[LIGHT_RUNNING] = !state[LIGHT_RUNNING];
         send_cmd(LIGHT_ID_RUNNING, state[LIGHT_RUNNING] ? LIGHT_CMD_ON : LIGHT_CMD_OFF);
+        /* Fjernlys og tågelys kræver kørelys (som button.c på STM32) */
+        if (!state[LIGHT_RUNNING]) {
+            set_simple(LIGHT_HIGH_BEAM, LIGHT_ID_HIGH_BEAM, false);
+            set_simple(LIGHT_FOG, LIGHT_ID_FOG_LIGHT, false);
+        }
+        break;
+
+    case LIGHT_HIGH_BEAM:
+    case LIGHT_FOG:
+        if (!state[LIGHT_RUNNING])
+            return;
+        set_simple(light, light == LIGHT_HIGH_BEAM ? LIGHT_ID_HIGH_BEAM : LIGHT_ID_FOG_LIGHT,
+                   !state[light]);
         break;
 
     case LIGHT_BRAKE:
@@ -167,6 +191,8 @@ void lights_resend(void)
 {
     send_cmd(LIGHT_ID_RUNNING, state[LIGHT_RUNNING] ? LIGHT_CMD_ON : LIGHT_CMD_OFF);
     send_cmd(LIGHT_ID_BRAKE, state[LIGHT_BRAKE] ? LIGHT_CMD_ON : LIGHT_CMD_OFF);
+    send_cmd(LIGHT_ID_HIGH_BEAM, state[LIGHT_HIGH_BEAM] ? LIGHT_CMD_ON : LIGHT_CMD_OFF);
+    send_cmd(LIGHT_ID_FOG_LIGHT, state[LIGHT_FOG] ? LIGHT_CMD_ON : LIGHT_CMD_OFF);
     if (state[LIGHT_HAZARD]) {
         send_cmd(LIGHT_ID_HAZARD, LIGHT_CMD_BLINK_HAZARD);
     } else {
@@ -185,5 +211,7 @@ void lights_reset(void)
     send_cmd(LIGHT_ID_TURN_LEFT, LIGHT_CMD_OFF);
     send_cmd(LIGHT_ID_TURN_RIGHT, LIGHT_CMD_OFF);
     send_cmd(LIGHT_ID_HAZARD, LIGHT_CMD_OFF);
+    send_cmd(LIGHT_ID_HIGH_BEAM, LIGHT_CMD_OFF);
+    send_cmd(LIGHT_ID_FOG_LIGHT, LIGHT_CMD_OFF);
     print_state();
 }

@@ -35,8 +35,10 @@ Hver knap forbindes mellem GPIO-benet og **GND**. Pi'ens interne pull-up bruges,
 | Blink V    | GPIO 13   | 33         | Tryk = tænd/sluk. Virker ikke under havari |
 | Blink H    | GPIO 22   | 15         | Som Blink V |
 | Havari     | GPIO 26   | 37         | Tryk = tænd/sluk. Slukker blinklys |
+| Fjernlys   | GPIO 27   | 13         | Tryk = tænd/sluk. Kræver kørelys |
+| Tågelys    | GPIO 23   | 16         | Tryk = tænd/sluk. Kræver kørelys |
 
-GND findes fx på fysisk pin 14, 30, 34 eller 39. Pins ændres i tabellen i `src/button.c`. Benene holder CAN HAT'en fri: SPI0 (GPIO 8-11), SPI1 (GPIO 18-21) og interrupts (GPIO 24-25).
+GND findes fx på fysisk pin 14, 30, 34 eller 39. Pins ændres i tabellen i `src/button.c`. Benene holder CAN HAT'en fri: SPI0 (GPIO 7-11), SPI1 (GPIO 16-21) og interrupts (GPIO 24-25).
 
 ## Byg og kør
 ```sh
