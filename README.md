@@ -11,7 +11,7 @@ Senere kommer et dashboard på skærmen med hastighed, batteri, effekt og lys- o
 ```
 include/   button.h   can_bus.h   lights.h   vesc.h   time_ms.h
 src/       button.c   can_bus.c   lights.c   vesc.c   main.c
-scripts/   setup_can.sh  setup_vcan.sh  fake_vesc.sh  solbil-tablet.service
+scripts/   setup_can.sh  setup_vcan.sh  fake_vesc.sh  autostart.sh  solbil-tablet.service
 assets/    logo.png   fonts/ (Inter og JetBrains Mono, SIL Open Font License)
 ```
 
@@ -30,9 +30,9 @@ Hver knap forbindes mellem GPIO-benet og **GND**. Pi'ens interne pull-up bruges,
 
 | Knap       | GPIO (BCM) | Fysisk pin | Opførsel |
 |------------|-----------|------------|----------|
-| Kørelys    | GPIO 5    | 29         | Tryk = tænd/sluk. Slukker også blinklys |
-| Bremse     | GPIO 6    | 31         | Tændt så længe knappen holdes |
-| Blink V    | GPIO 13   | 33         | Tryk = tænd/sluk. Kræver kørelys, virker ikke under havari |
+| Kørelys    | GPIO 5    | 29         | Tryk = tænd/sluk |
+| Bremse     | GPIO 6    | 31         | Kontakt på bremsepedalen. Tændt så længe den er trykket. Bremselyset tænder også automatisk ved regenerativ bremsning |
+| Blink V    | GPIO 13   | 33         | Tryk = tænd/sluk. Virker ikke under havari |
 | Blink H    | GPIO 22   | 15         | Som Blink V |
 | Havari     | GPIO 26   | 37         | Tryk = tænd/sluk. Slukker blinklys |
 
@@ -111,11 +111,28 @@ CAN ID `0x123`, standard ID, klassisk 8-byte frame, 1 Mbit/s.
 Byte 0 = `lightID`, byte 1 = `command`, resten er 0. Ændres protokollen i
 `fdcan_driver.h`, skal `include/lights.h` rettes tilsvarende.
 
-## Autostart ved boot
+## Autostart ved boot (kiosk-tilstand)
+I bilen skal Pi'en starte direkte i dashboardet uden tastatur, skrivebord eller boot-tekst.
 ```sh
-sudo cp scripts/solbil-tablet.service /etc/systemd/system/
-sudo systemctl enable --now solbil-tablet
+sudo scripts/autostart.sh on    # til bilen
+sudo scripts/autostart.sh off   # tilbage til skrivebordet, til udvikling
+sudo reboot
 ```
+- Dashboardet køres af systemd-servicen `solbil-tablet` og tegner direkte på skærmen (KMS/DRM).
+- Går programmet ned, starter det igen efter 2 sekunder.
+- Mangler CAN-hardwaren, kører dashboardet alligevel og prøver at få forbindelse hvert 2. sekund.
+- SSH virker stadig. Under udvikling: `sudo systemctl stop solbil-tablet`, test, og `sudo systemctl start solbil-tablet`.
+- Log: `journalctl -u solbil-tablet -f`
+
+**Beskyt SD-kortet**, når alt er færdigt: Bilen slukker uden at lukke Pi'en ned, og det kan ødelægge SD-kortet. Slå skrivebeskyttelse til med `sudo raspi-config nonint do_overlayfs 0` og genstart. Ændringer forsvinder så ved genstart, så slå den fra igen (`do_overlayfs 1`) før I opdaterer koden.
+
+## Regler (iESC 2026)
+| Regel | Krav | Løsning |
+|---|---|---|
+| 2.24.12 | Blinklys 90 ± 30 blink/min | `BLINK_INTERVAL_MS` = 333 ms = 90 blink/min (også i STM32-koden) |
+| 2.24.14 | Stoplys ved bremsning, også regenerativ | Pedalkontakt på Bremse-indgangen + automatisk ved negativ batteristrøm fra VESC'en |
+| 3.31.2 | Blink til højre når man bliver overhalet | Blinklys virker uden kørelys |
+| 2.26.1 | Vis hastighed, blinklys og havari | Dashboardet |
 
 ## TODO
 - [ ] CAN-hardware til Pi'en

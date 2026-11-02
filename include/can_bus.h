@@ -21,8 +21,14 @@ typedef struct {
     uint8_t data[8];
 } can_msg_t;
 
-/* Åbner og binder en CAN socket på fx "can0". Returnerer 0 ved succes. */
+/*
+ * Åbner og binder en CAN socket på fx "can0". Returnerer 0 ved succes.
+ * Må kaldes igen efter en fejl - samme fejl logges kun første gang.
+ */
 int can_bus_init(const char *ifname, bool dry_run);
+
+/* true hvis der er en åben socket (eller dry-run) */
+bool can_bus_is_open(void);
 
 /* Sender en standard (11-bit) frame. len må være 0-8. Returnerer 0 ved succes. */
 int can_bus_send(uint32_t id, const uint8_t *data, size_t len);

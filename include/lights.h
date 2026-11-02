@@ -23,8 +23,18 @@
 #define LIGHT_ID_BRAKE          0x04
 #define LIGHT_ID_HAZARD         0x05
 
-/* Samme blinkinterval som BLINK_INTERVAL_MS i fdcan_driver.c */
-#define BLINK_INTERVAL_MS       500
+/*
+ * Samme blinkinterval som BLINK_INTERVAL_MS i fdcan_driver.c.
+ * iESC 2.24.12 kræver 90 ± 30 blink/min - 333 ms tændt + 333 ms slukket = 90 blink/min.
+ */
+#define BLINK_INTERVAL_MS       333
+
+/*
+ * Bremselys ved regenerativ bremsning (iESC 2.24.14). Hysterese, så lyset ikke
+ * flimrer omkring grænsen: tænder under -ON, slukker igen over -OFF (batteristrøm i A).
+ */
+#define REGEN_BRAKE_ON_A        2.0f
+#define REGEN_BRAKE_OFF_A       1.0f
 
 typedef enum {
     LIGHT_RUNNING,
@@ -41,11 +51,21 @@ bool lights_is_on(light_t light);
 /* true hvis blinklys/havari er i den tændte halvdel af blinket lige nu */
 bool lights_blink_phase(unsigned int now_ms);
 
-/* Kaldes når en knap trykkes ned / slippes. Logikken følger button.c på STM32. */
+/* Kaldes når en knap trykkes ned / slippes. */
 void lights_press(light_t light);
 void lights_release(light_t light);
 
+/*
+ * Kaldes løbende med VESC'ens batteristrøm. Negativ strøm = VESC'en lader batteriet
+ * op = regenerativ bremsning, som også skal tænde bremselyset (uanset kørselsretning).
+ * valid = false når der ikke er friske VESC-data.
+ */
+void lights_update_regen(float battery_current_a, bool valid);
+
 /* Slukker alt på printet, så det matcher Pi'ens tilstand ved opstart. */
 void lights_reset(void);
+
+/* Sender den nuværende tilstand for alle lys igen, fx når CAN-forbindelsen kommer tilbage. */
+void lights_resend(void);
 
 #endif /* LIGHTS_H */

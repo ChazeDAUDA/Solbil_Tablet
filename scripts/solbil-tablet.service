@@ -1,15 +1,24 @@
-# Starter tabletten automatisk ved boot.
-# Installér:  sudo cp scripts/solbil-tablet.service /etc/systemd/system/
-#             sudo systemctl enable --now solbil-tablet
+# Starter dashboardet automatisk ved boot, direkte på skærmen uden skrivebord.
+# Installeres af:  sudo scripts/autostart.sh on
+# Log:             journalctl -u solbil-tablet -f
+# Stop/start:      sudo systemctl stop solbil-tablet   /   sudo systemctl start solbil-tablet
 [Unit]
-Description=Solbil knapper og CAN
-After=network.target
+Description=Solbil dashboard
+After=systemd-user-sessions.service
+# Dashboardet overtager skærmen i stedet for login-prompten på tty1
+Conflicts=getty@tty1.service
 
 [Service]
-ExecStartPre=/home/solarcarpi/solbil-tablet/scripts/setup_can.sh can0
-ExecStart=/home/solarcarpi/solbil-tablet/build/solbil-tablet -i can0
+User=solarcarpi
+SupplementaryGroups=video render input gpio
 WorkingDirectory=/home/solarcarpi/solbil-tablet
-Restart=on-failure
+# SDL tegner direkte på skærmen (KMS/DRM), da der ikke kører et skrivebord
+Environment=SDL_VIDEODRIVER=kmsdrm
+# '+' = køres som root (ip link kræver det), '-' = fortsæt selv om CAN-hardwaren mangler
+ExecStartPre=-+/home/solarcarpi/solbil-tablet/scripts/setup_can.sh can0
+ExecStart=/home/solarcarpi/solbil-tablet/build/solbil-tablet -i can0
+# Går programmet ned eller lukkes, startes det igen
+Restart=always
 RestartSec=2
 
 [Install]

@@ -14,7 +14,9 @@ static const char *labels[LIGHT_COUNT] = {
     [LIGHT_HAZARD]     = "Havari",
 };
 
+/* state[LIGHT_BRAKE] er bremselysets faktiske tilstand = pedal ELLER regenerering */
 static bool state[LIGHT_COUNT];
+static bool brake_pedal, brake_regen;
 
 /* Tidspunkt hvor blinket startede - STM32 tænder lampen med det samme ved en blink-kommando */
 static unsigned int blink_start_ms;
@@ -53,6 +55,17 @@ static void set_right(bool on)
     send_cmd(LIGHT_ID_TURN_RIGHT, on ? LIGHT_CMD_BLINK_RIGHT : LIGHT_CMD_OFF);
 }
 
+/* Bremselyset er tændt når pedalen er trykket eller der regenereres. Returnerer true ved ændring. */
+static bool update_brake(void)
+{
+    bool on = brake_pedal || brake_regen;
+    if (on == state[LIGHT_BRAKE])
+        return false;
+    state[LIGHT_BRAKE] = on;
+    send_cmd(LIGHT_ID_BRAKE, on ? LIGHT_CMD_ON : LIGHT_CMD_OFF);
+    return true;
+}
+
 const char *lights_label(light_t light)
 {
     return labels[light];
@@ -74,19 +87,13 @@ void lights_press(light_t light)
     case LIGHT_RUNNING:
         state[LIGHT_RUNNING] = !state[LIGHT_RUNNING];
         send_cmd(LIGHT_ID_RUNNING, state[LIGHT_RUNNING] ? LIGHT_CMD_ON : LIGHT_CMD_OFF);
-        /* Slukkes kørelys, slukkes blinklys også */
-        if (!state[LIGHT_RUNNING]) {
-            if (state[LIGHT_TURN_LEFT])
-                set_left(false);
-            if (state[LIGHT_TURN_RIGHT])
-                set_right(false);
-        }
         break;
 
     case LIGHT_BRAKE:
-        /* Bremsen er tændt så længe knappen holdes - slukkes i lights_release() */
-        state[LIGHT_BRAKE] = true;
-        send_cmd(LIGHT_ID_BRAKE, LIGHT_CMD_ON);
+        /* Bremsepedalens kontakt - tændt så længe den er trykket, slukkes i lights_release() */
+        brake_pedal = true;
+        if (!update_brake())
+            return;
         break;
 
     case LIGHT_HAZARD:
@@ -105,8 +112,11 @@ void lights_press(light_t light)
 
     case LIGHT_TURN_LEFT:
     case LIGHT_TURN_RIGHT:
-        /* Blinklys kræver kørelys og virker ikke mens havari er tændt */
-        if (!state[LIGHT_RUNNING] || state[LIGHT_HAZARD])
+        /*
+         * Blinklys virker uafhængigt af kørelys (iESC 3.31.2: man skal kunne blinke ved
+         * overhaling). Under havari ignoreres de, ellers ville STM32 afbryde havariblinket.
+         */
+        if (state[LIGHT_HAZARD])
             return;
         if (light == LIGHT_TURN_LEFT) {
             if (state[LIGHT_TURN_RIGHT])
@@ -128,16 +138,48 @@ void lights_press(light_t light)
 
 void lights_release(light_t light)
 {
-    if (light == LIGHT_BRAKE && state[LIGHT_BRAKE]) {
-        state[LIGHT_BRAKE] = false;
-        send_cmd(LIGHT_ID_BRAKE, LIGHT_CMD_OFF);
+    if (light == LIGHT_BRAKE) {
+        brake_pedal = false;
+        if (update_brake())
+            print_state();
+    }
+}
+
+void lights_update_regen(float battery_current_a, bool valid)
+{
+    bool regen = brake_regen;
+
+    if (!valid)
+        regen = false;
+    else if (battery_current_a < -REGEN_BRAKE_ON_A)
+        regen = true;
+    else if (battery_current_a > -REGEN_BRAKE_OFF_A)
+        regen = false;
+
+    if (regen == brake_regen)
+        return;
+    brake_regen = regen;
+    if (update_brake())
         print_state();
+}
+
+void lights_resend(void)
+{
+    send_cmd(LIGHT_ID_RUNNING, state[LIGHT_RUNNING] ? LIGHT_CMD_ON : LIGHT_CMD_OFF);
+    send_cmd(LIGHT_ID_BRAKE, state[LIGHT_BRAKE] ? LIGHT_CMD_ON : LIGHT_CMD_OFF);
+    if (state[LIGHT_HAZARD]) {
+        send_cmd(LIGHT_ID_HAZARD, LIGHT_CMD_BLINK_HAZARD);
+    } else {
+        send_cmd(LIGHT_ID_TURN_LEFT, state[LIGHT_TURN_LEFT] ? LIGHT_CMD_BLINK_LEFT : LIGHT_CMD_OFF);
+        send_cmd(LIGHT_ID_TURN_RIGHT, state[LIGHT_TURN_RIGHT] ? LIGHT_CMD_BLINK_RIGHT : LIGHT_CMD_OFF);
     }
 }
 
 void lights_reset(void)
 {
     memset(state, 0, sizeof state);
+    brake_pedal = false;
+    brake_regen = false;
     send_cmd(LIGHT_ID_RUNNING, LIGHT_CMD_OFF);
     send_cmd(LIGHT_ID_BRAKE, LIGHT_CMD_OFF);
     send_cmd(LIGHT_ID_TURN_LEFT, LIGHT_CMD_OFF);

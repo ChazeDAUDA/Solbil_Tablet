@@ -14,6 +14,7 @@
 #define POLL_INTERVAL_US  10000   /* Knapper og CAN læses hvert 10. ms */
 #define PRINT_INTERVAL_MS 1000    /* VESC-data printes hvert sekund (indtil dashboardet er klar) */
 #define DRAW_INTERVAL_MS  33      /* Skærmen tegnes ca. 30 gange i sekundet */
+#define CAN_RETRY_MS      2000    /* Hvor ofte vi prøver at åbne CAN igen, hvis det mangler */
 
 static volatile sig_atomic_t running = 1;
 
@@ -76,10 +77,12 @@ int main(int argc, char **argv)
     signal(SIGINT, on_signal);
     signal(SIGTERM, on_signal);
 
-    if (can_bus_init(ifname, dry_run) != 0) {
-        fprintf(stderr, "Tip: kør med -n for at teste uden CAN-hardware\n");
-        return EXIT_FAILURE;
-    }
+    /*
+     * Dashboardet skal altid op at køre i bilen - også uden CAN. Mangler CAN, prøver
+     * main-loopet igen hvert CAN_RETRY_MS og sender lysenes tilstand, når det lykkes.
+     */
+    if (can_bus_init(ifname, dry_run) != 0)
+        fprintf(stderr, "[can] kører uden CAN indtil videre (brug -n for at teste uden hardware)\n");
 
     if (button_init(chip) != 0) {
         can_bus_close();
@@ -99,6 +102,7 @@ int main(int argc, char **argv)
     printf("Klar - tryk på knapperne (ESC eller Ctrl+C for at stoppe)\n");
     unsigned int last_print = time_ms();
     unsigned int last_draw = 0;
+    unsigned int last_can_retry = time_ms();
 
     while (running) {
         if (!display_handle_events())
@@ -111,6 +115,16 @@ int main(int argc, char **argv)
             vesc_handle_msg(&msg, time_ms());
 
         unsigned int now = time_ms();
+
+        if (!can_bus_is_open() && now - last_can_retry >= CAN_RETRY_MS) {
+            last_can_retry = now;
+            if (can_bus_init(ifname, dry_run) == 0)
+                lights_resend();
+        }
+
+        /* Bremselys ved regenerativ bremsning (negativ batteristrøm) */
+        lights_update_regen(vesc_get()->current_in, vesc_fresh(VESC_STATUS_4, now));
+
         if (now - last_print >= PRINT_INTERVAL_MS) {
             last_print = now;
             print_vesc(now);

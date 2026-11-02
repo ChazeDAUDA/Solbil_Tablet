@@ -5,6 +5,7 @@
 #include <linux/can.h>
 #include <linux/can/raw.h>
 #include <net/if.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/ioctl.h>
@@ -13,6 +14,17 @@
 
 static int sock = -1;
 static bool dry_run_mode = false;
+static bool failed_before = false;   /* Så genforsøg ikke fylder loggen med samme fejl */
+
+static void report(const char *fmt, ...)
+{
+    if (failed_before)
+        return;
+    va_list ap;
+    va_start(ap, fmt);
+    vfprintf(stderr, fmt, ap);
+    va_end(ap);
+}
 
 int can_bus_init(const char *ifname, bool dry_run)
 {
@@ -24,7 +36,8 @@ int can_bus_init(const char *ifname, bool dry_run)
 
     sock = socket(PF_CAN, SOCK_RAW, CAN_RAW);
     if (sock < 0) {
-        perror("[can] socket");
+        report("[can] socket: %s\n", strerror(errno));
+        failed_before = true;
         return -1;
     }
 
@@ -32,7 +45,7 @@ int can_bus_init(const char *ifname, bool dry_run)
     memset(&ifr, 0, sizeof ifr);
     strncpy(ifr.ifr_name, ifname, IFNAMSIZ - 1);
     if (ioctl(sock, SIOCGIFINDEX, &ifr) < 0) {
-        fprintf(stderr, "[can] interface '%s' findes ikke - se scripts/setup_can.sh\n", ifname);
+        report("[can] interface '%s' findes ikke - prøver igen i baggrunden\n", ifname);
         goto fail;
     }
 
@@ -41,7 +54,7 @@ int can_bus_init(const char *ifname, bool dry_run)
     addr.can_family = AF_CAN;
     addr.can_ifindex = ifr.ifr_ifindex;
     if (bind(sock, (struct sockaddr *)&addr, sizeof addr) < 0) {
-        perror("[can] bind");
+        report("[can] bind: %s\n", strerror(errno));
         goto fail;
     }
 
@@ -49,12 +62,19 @@ int can_bus_init(const char *ifname, bool dry_run)
     fcntl(sock, F_SETFL, fcntl(sock, F_GETFL) | O_NONBLOCK);
 
     printf("[can] klar på %s\n", ifname);
+    failed_before = false;
     return 0;
 
 fail:
     close(sock);
     sock = -1;
+    failed_before = true;
     return -1;
+}
+
+bool can_bus_is_open(void)
+{
+    return dry_run_mode || sock >= 0;
 }
 
 int can_bus_send(uint32_t id, const uint8_t *data, size_t len)
@@ -75,6 +95,8 @@ int can_bus_send(uint32_t id, const uint8_t *data, size_t len)
 
     if (dry_run_mode)
         return 0;
+    if (sock < 0)
+        return -1;   /* Ingen CAN endnu - main prøver at åbne igen */
 
     if (write(sock, &frame, sizeof frame) != sizeof frame) {
         perror("[can] write");
