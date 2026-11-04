@@ -27,10 +27,12 @@ static void on_signal(int sig)
 static void usage(const char *prog)
 {
     fprintf(stderr,
-            "Brug: %s [-i interface] [-c gpiochip] [-n]\n"
-            "  -i  CAN interface (standard: can0)\n"
+            "Brug: %s [-v interface] [-i interface] [-c gpiochip] [-n] [-w]\n"
+            "  -v  CAN-bus til VESC'en (standard: can_vesc)\n"
+            "  -i  CAN-bus til STM32-lysprintet (standard: can_stm32)\n"
             "  -c  GPIO chip (standard: /dev/gpiochip0)\n"
-            "  -n  dry-run: print frames i stedet for at sende\n",
+            "  -n  dry-run: print frames i stedet for at sende\n"
+            "  -w  vindue i stedet for fullscreen\n",
             prog);
 }
 
@@ -55,15 +57,17 @@ static void print_vesc(unsigned int now)
 
 int main(int argc, char **argv)
 {
-    const char *ifname = "can0";
+    const char *vesc_if = "can_vesc";
+    const char *light_if = "can_stm32";
     const char *chip = "/dev/gpiochip0";
     bool dry_run = false;
     bool fullscreen = true;
     int opt;
 
-    while ((opt = getopt(argc, argv, "i:c:nwh")) != -1) {
+    while ((opt = getopt(argc, argv, "v:i:c:nwh")) != -1) {
         switch (opt) {
-        case 'i': ifname = optarg; break;
+        case 'v': vesc_if = optarg; break;
+        case 'i': light_if = optarg; break;
         case 'c': chip = optarg; break;
         case 'n': dry_run = true; break;
         case 'w': fullscreen = false; break;
@@ -78,21 +82,28 @@ int main(int argc, char **argv)
     signal(SIGTERM, on_signal);
 
     /*
-     * Dashboardet skal altid op at køre i bilen - også uden CAN. Mangler CAN, prøver
-     * main-loopet igen hvert CAN_RETRY_MS og sender lysenes tilstand, når det lykkes.
+     * To busser: VESC'en (klassisk CAN) og STM32-lysprintet. Dashboardet skal altid op
+     * at køre i bilen - også uden CAN. Mangler en bus, prøver main-loopet igen hvert
+     * CAN_RETRY_MS (og sender lysenes tilstand, når lysbussen kommer).
      */
-    if (can_bus_init(ifname, dry_run) != 0)
-        fprintf(stderr, "[can] kører uden CAN indtil videre (brug -n for at teste uden hardware)\n");
+    can_bus_t vesc_bus, light_bus;
+    can_bus_init(&vesc_bus, vesc_if, dry_run);
+    can_bus_init(&light_bus, light_if, dry_run);
+    can_bus_open(&vesc_bus);
+    can_bus_open(&light_bus);
+    lights_init(&light_bus);
 
     if (button_init(chip) != 0) {
-        can_bus_close();
+        can_bus_close(&vesc_bus);
+        can_bus_close(&light_bus);
         return EXIT_FAILURE;
     }
 
     if (display_init(fullscreen) != 0) {
         display_close();
         button_close();
-        can_bus_close();
+        can_bus_close(&vesc_bus);
+        can_bus_close(&light_bus);
         return EXIT_FAILURE;
     }
 
@@ -111,14 +122,16 @@ int main(int argc, char **argv)
         button_poll();
 
         can_msg_t msg;
-        while (can_bus_recv(&msg))
+        while (can_bus_recv(&vesc_bus, &msg))
             vesc_handle_msg(&msg, time_ms());
 
         unsigned int now = time_ms();
 
-        if (!can_bus_is_open() && now - last_can_retry >= CAN_RETRY_MS) {
+        if (now - last_can_retry >= CAN_RETRY_MS) {
             last_can_retry = now;
-            if (can_bus_init(ifname, dry_run) == 0)
+            if (!can_bus_is_open(&vesc_bus))
+                can_bus_open(&vesc_bus);
+            if (!can_bus_is_open(&light_bus) && can_bus_open(&light_bus) == 0)
                 lights_resend();
         }
 
@@ -140,6 +153,7 @@ int main(int argc, char **argv)
 
     display_close();
     button_close();
-    can_bus_close();
+    can_bus_close(&vesc_bus);
+    can_bus_close(&light_bus);
     return EXIT_SUCCESS;
 }

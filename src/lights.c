@@ -23,6 +23,9 @@ static bool brake_pedal, brake_regen;
 /* Tidspunkt hvor blinket startede - STM32 tænder lampen med det samme ved en blink-kommando */
 static unsigned int blink_start_ms;
 
+/* Bussen til STM32-lysprintet */
+static can_bus_t *bus;
+
 static void send_cmd(uint8_t light_id, uint8_t command)
 {
     uint8_t data[CANFD_LIGHT_MSG_LEN];
@@ -30,7 +33,13 @@ static void send_cmd(uint8_t light_id, uint8_t command)
     memset(data, 0, sizeof data);
     data[0] = light_id;
     data[1] = command;
-    can_bus_send(CANFD_LIGHT_CMD_ID, data, sizeof data);
+    if (bus)
+        can_bus_send(bus, CANFD_LIGHT_CMD_ID, data, sizeof data);
+}
+
+void lights_init(can_bus_t *light_bus)
+{
+    bus = light_bus;
 }
 
 static void print_state(void)

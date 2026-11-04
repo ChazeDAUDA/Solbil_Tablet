@@ -3,6 +3,8 @@
 
 #include <stdbool.h>
 
+#include "can_bus.h"
+
 /*
  * Protokol - SKAL matche fdcan_driver.h i Solbil_rearlights.
  * Pi'en sender klassiske 8-byte frames (VESC kan ikke CAN FD); STM32 læser kun
@@ -48,6 +50,9 @@ typedef enum {
     LIGHT_FOG,
     LIGHT_COUNT
 } light_t;
+
+/* Angiver hvilken CAN-bus lyskommandoerne sendes på (STM32-lysprintet) */
+void lights_init(can_bus_t *light_bus);
 
 const char *lights_label(light_t light);
 bool lights_is_on(light_t light);

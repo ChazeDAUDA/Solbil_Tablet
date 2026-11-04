@@ -16,8 +16,8 @@ WorkingDirectory=/home/solarcarpi/solbil-tablet
 # SDL tegner direkte på skærmen (KMS/DRM), da der ikke kører et skrivebord
 Environment=SDL_VIDEODRIVER=kmsdrm
 # '+' = køres som root (ip link kræver det), '-' = fortsæt selv om CAN-hardwaren mangler
-ExecStartPre=-+/home/solarcarpi/solbil-tablet/scripts/setup_can.sh can0
-ExecStart=/home/solarcarpi/solbil-tablet/build/solbil-tablet -i can0
+ExecStartPre=-+/home/solarcarpi/solbil-tablet/scripts/setup_can.sh
+ExecStart=/home/solarcarpi/solbil-tablet/build/solbil-tablet
 # Går programmet ned eller lukkes, startes det igen
 Restart=always
 RestartSec=2
