@@ -1,0 +1,59 @@
+# Opstartsbillede: DTU Roadrunners-logoet på dashboardets mørke baggrund,
+# med en tynd orange statusbjælke der fyldes op, mens Pi'en starter.
+
+# Samme baggrundsfarve som dashboardet (10, 14, 18)
+Window.SetBackgroundTopColor(0.039, 0.055, 0.071);
+Window.SetBackgroundBottomColor(0.039, 0.055, 0.071);
+
+screen_w = Window.GetWidth();
+screen_h = Window.GetHeight();
+
+# Logo midt på skærmen, lidt over midten
+logo.image = Image("logo.png");
+logo.sprite = Sprite(logo.image);
+logo.x = Window.GetX() + screen_w / 2 - logo.image.GetWidth() / 2;
+logo.y = Window.GetY() + screen_h / 2 - logo.image.GetHeight() / 2 - 30;
+logo.sprite.SetPosition(logo.x, logo.y, 0);
+logo.sprite.SetOpacity(0);
+
+# Statusbjælke under logoet
+bar_w = 320;
+bar_h = 4;
+bar_x = Window.GetX() + screen_w / 2 - bar_w / 2;
+bar_y = logo.y + logo.image.GetHeight() + 50;
+
+track.image = Image("track.png").Scale(bar_w, bar_h);
+track.sprite = Sprite(track.image);
+track.sprite.SetPosition(bar_x, bar_y, 1);
+track.sprite.SetOpacity(0);
+
+bar.sprite = Sprite();
+bar.sprite.SetPosition(bar_x, bar_y, 2);
+
+# Logoet toner blødt frem
+fade = 0;
+fun refresh_callback()
+{
+    if (fade < 1)
+    {
+        fade = fade + 0.04;
+        if (fade > 1) fade = 1;
+        logo.sprite.SetOpacity(fade);
+        track.sprite.SetOpacity(fade);
+    }
+}
+Plymouth.SetRefreshFunction(refresh_callback);
+
+# progress går fra 0 til 1 i løbet af opstarten
+fun progress_callback(duration, progress)
+{
+    w = Math.Int(bar_w * progress);
+    if (w < 1) w = 1;
+    bar.image = Image("bar.png").Scale(w, bar_h);
+    bar.sprite.SetImage(bar.image);
+}
+Plymouth.SetBootProgressFunction(progress_callback);
+
+# Ingen tekst eller kodeord-felter vises (Pi'en spørger aldrig om noget ved boot)
+fun message_callback(text) {}
+Plymouth.SetMessageFunction(message_callback);

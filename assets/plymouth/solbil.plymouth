@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=Solbil
+Description=DTU Roadrunners Solar Team - opstartsbillede
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/solbil
+ScriptFile=/usr/share/plymouth/themes/solbil/solbil.script
