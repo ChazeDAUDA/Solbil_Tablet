@@ -4,7 +4,8 @@
 # Stop/start:      sudo systemctl stop solbil-tablet   /   sudo systemctl start solbil-tablet
 [Unit]
 Description=Solbil dashboard
-After=systemd-user-sessions.service
+# Vent til opstartsbilledet (Plymouth) har sluppet skærmen
+After=systemd-user-sessions.service plymouth-quit-wait.service
 # Dashboardet overtager skærmen i stedet for login-prompten på tty1
 Conflicts=getty@tty1.service
 
