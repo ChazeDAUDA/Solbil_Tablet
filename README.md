@@ -3,15 +3,17 @@
 Program til Raspberry Pi 3B+ i solbilen. Fysiske knapper på Pi'ens GPIO tænder og slukker lys. Hvert tryk sendes som en CAN-kommando til STM32-lysprintet ([Solbil_rearlights](https://github.com/CarlFalkenhayn/Solbil_rearlights)). Programmet læser samtidig status fra VESC-motorcontrolleren på samme bus.
 
 ```
-[Pi + knapper] ── CAN 1 Mbit/s ── [VESC 100/250] ── [STM32 lysprint]
+                ┌── can_vesc  (klassisk CAN, 500 kbit/s) ── [VESC 100/250]
+[Pi + CAN HAT] ─┤
+                └── can_stm32 (1 Mbit/s, CAN FD senere) ──── [STM32 lysprint]
 ```
 
 Senere kommer et dashboard på skærmen med hastighed, batteri, effekt og lys- og blinklysindikatorer.
 
 ```
-include/   button.h   can_bus.h   lights.h   vesc.h   time_ms.h
-src/       button.c   can_bus.c   lights.c   vesc.c   main.c
-scripts/   setup_can.sh  setup_vcan.sh  fake_vesc.sh  autostart.sh  solbil-tablet.service
+include/   button.h   can_bus.h   display.h   gfx.h   lights.h   vesc.h   time_ms.h
+src/       button.c   can_bus.c   display.c   gfx.c   lights.c   vesc.c   main.c
+scripts/   install_can_hat.sh  setup_can.sh  setup_vcan.sh  fake_vesc.sh  autostart.sh  solbil-tablet.service
 assets/    logo.png   fonts/ (Inter og JetBrains Mono, SIL Open Font License)
 ```
 
@@ -55,9 +57,10 @@ Ved hvert knaptryk printes CAN-framen og den nye tilstand:
 [lys]  Kørelys: TÆNDT  Bremse: slukket  Blink V: slukket  Blink H: slukket  Havari: slukket
 ```
 
-Med CAN-hardware:
+Med CAN-hardware (servicen gør det selv ved opstart):
 ```sh
-sudo scripts/setup_can.sh can0
+sudo systemctl stop solbil-tablet   # hvis autostart kører
+sudo scripts/setup_can.sh
 ./build/solbil-tablet
 ```
 Programmet printer VESC-data hvert sekund:
@@ -68,7 +71,7 @@ Programmet printer VESC-data hvert sekund:
 ### Test uden hardware (vcan)
 ```sh
 sudo scripts/setup_vcan.sh
-./build/solbil-tablet -i vcan0
+./build/solbil-tablet -v vcan0 -i vcan0
 ```
 Kør i en anden terminal `candump vcan0` for at se lyskommandoerne. Du kan også sende falske VESC-data, så hele dashboardet fyldes ud:
 ```sh
@@ -76,14 +79,22 @@ scripts/fake_vesc.sh vcan0
 ```
 Felter uden data viser `NULL`.
 
-## CAN-bus: klassisk CAN, ikke FD
-VESC 100/250 kan **ikke** CAN FD. Hvis der kommer FD-frames på bussen, sender VESC'en error frames, og så forstyrres hele bussen. Derfor kører hele bussen klassisk CAN med **1 Mbit/s**:
-- **Pi:** `scripts/setup_can.sh`
-- **STM32:** `fdcan.c` er allerede 1 Mbit/s. `FDCAN_FRAME_FD_NO_BRS` modtager også klassiske frames, og modtageren læser kun byte 0-1.
-- **VESC:** I VESC Tool under App Settings → General skal I sætte:
-  - `CAN Baud Rate` = `CAN_BAUD_1M`
-  - `CAN Status Message Mode` = `CAN_STATUS_1_2_3_4_5`
-  - `CAN Status Rate` = fx 50 Hz
+## CAN-busser
+VESC 100/250 kan **ikke** CAN FD. Kommer der FD-frames på dens bus, sender den error frames, og så forstyrres hele bussen. Derfor har Pi'en **to separate busser** via CAN HAT'en:
+
+| Bus | HAT-terminal | Til | Hastighed |
+|---|---|---|---|
+| `can_vesc` | CAN_0 | VESC-motorcontrolleren | 500 kbit/s klassisk (skal matche VESC Tool) |
+| `can_stm32` | CAN_1 | STM32-lysprintet | 1 Mbit/s klassisk (CAN FD senere) |
+
+Hastighederne står i `scripts/setup_can.sh`, som servicen kører ved opstart.
+
+**VESC Tool** (App Settings → General):
+- `CAN Baud Rate` = `CAN_BAUD_500K` (eller ret `VESC_BITRATE` i `setup_can.sh`)
+- `CAN Status Message Mode` = `CAN_STATUS_1_2_3_4_5`
+- `CAN Status Rate` = fx 50 Hz
+
+Se trafikken på en bus: `candump can_vesc` (kan køre samtidig med dashboardet).
 
 ## VESC-data
 | Værdi               | Kilde |
@@ -97,19 +108,21 @@ VESC 100/250 kan **ikke** CAN FD. Hvis der kommer FD-frames på bussen, sender V
 Motorens polpar, gearing, hjuldiameter og batterikapacitet sættes øverst i `include/vesc.h`.
 
 ## CAN-hardware
-Raspberry Pi 3B+ har **ingen indbygget CAN-controller**, så I skal bruge en af følgende:
-- **Valgt:** Waveshare 2-CH CAN FD HAT (2× MCP2518FD, isoleret). Standard "Mode A" bruger SPI0 + SPI1. Tilføj i `/boot/firmware/config.txt`:
-  ```
-  dtparam=spi=on
-  dtoverlay=spi1-3cs
-  dtoverlay=mcp251xfd,spi0-0,interrupt=25
-  dtoverlay=mcp251xfd,spi1-0,interrupt=24
-  ```
-  Så kommer kanalerne op som `can0` og `can1`. VESC'en kan ikke CAN FD, så der skal være to busser: én CAN FD til STM32 og én klassisk til VESC'en.
-- Eller en USB-adapter med CAN FD-understøttelse (fx PEAK PCAN-USB FD eller candleLight FD).
+**Waveshare 2-CH CAN FD HAT** (2× MCP2518FD, 40 MHz, galvanisk isoleret), "Mode A": CAN_0 på SPI0 (interrupt GPIO 25), CAN_1 på SPI1 (interrupt GPIO 24).
+
+Installation (én gang):
+```sh
+sudo scripts/install_can_hat.sh
+sudo reboot
+```
+Scriptet slår SPI og driveren til i `config.txt` og giver kanalerne **faste navne** efter deres placering på HAT'en (`/etc/systemd/network/10-can-*.link`). Uden det hedder de `can0`/`can1` i den rækkefølge, chippene bliver klar ved boot, og den kan skifte.
+
+Tjek: `ip -br link | grep can` skal vise `can_vesc` og `can_stm32`.
+
+**Terminering:** Hver bus skal have 120 Ω i begge ender. HAT'en har en jumper pr. kanal. Mål med strømmen slukket mellem CAN-H og CAN-L: **60 Ω** er rigtigt (to modstande), 120 Ω betyder, at der mangler én.
 
 ## Protokol (fra Solbil_rearlights)
-CAN ID `0x123`, standard ID, klassisk 8-byte frame, 1 Mbit/s.
+CAN ID `0x123`, standard ID, klassisk 8-byte frame, 1 Mbit/s på `can_stm32`.
 Byte 0 = `lightID`, byte 1 = `command`, resten er 0. Ændres protokollen i
 `fdcan_driver.h`, skal `include/lights.h` rettes tilsvarende.
 
@@ -137,9 +150,9 @@ sudo reboot
 | 2.26.1 | Vis hastighed, blinklys og havari | Dashboardet |
 
 ## TODO
-- [ ] CAN-hardware til Pi'en
-- [ ] Sæt `fdcan.c` på modtagerprintet til `FDCAN_MODE_NORMAL` (står i internal loopback)
-- [ ] 120 Ω terminering i begge ender af bussen (Pi og STM32 er enderne, VESC sidder i midten)
-- [ ] VESC Tool: 1 Mbit/s og status-beskeder 1-5 slået til
+- [x] CAN-hardware til Pi'en (Waveshare 2-CH CAN FD HAT)
+- [ ] 120 Ω terminering i begge ender af hver bus
+- [ ] CAN FD på `can_stm32` (16-byte frames som i `fdcan_driver.c`)
+- [ ] VESC Tool: 500K og status-beskeder 1-5 slået til
 - [ ] Ret polpar, gearing, hjuldiameter og batterikapacitet i `include/vesc.h`
 - [ ] Dashboard: hastighed, batterispænding/-strøm/-kapacitet, effekt, lys- og blinklysindikatorer
