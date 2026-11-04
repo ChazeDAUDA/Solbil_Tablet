@@ -13,7 +13,7 @@ Senere kommer et dashboard på skærmen med hastighed, batteri, effekt og lys- o
 ```
 include/   button.h   can_bus.h   display.h   gfx.h   lights.h   vesc.h   time_ms.h
 src/       button.c   can_bus.c   display.c   gfx.c   lights.c   vesc.c   main.c
-scripts/   install_can_hat.sh  setup_can.sh  setup_vcan.sh  fake_vesc.sh  autostart.sh  solbil-tablet.service
+scripts/   install_can_hat.sh  install_bootsplash.sh  setup_can.sh  setup_vcan.sh  fake_vesc.sh  autostart.sh  solbil-tablet.service
 assets/    logo.png   fonts/ (Inter og JetBrains Mono, SIL Open Font License)
 ```
 
@@ -138,6 +138,12 @@ sudo reboot
 - Mangler CAN-hardwaren, kører dashboardet alligevel og prøver at få forbindelse hvert 2. sekund.
 - SSH virker stadig. Under udvikling: `sudo systemctl stop solbil-tablet`, test, og `sudo systemctl start solbil-tablet`.
 - Log: `journalctl -u solbil-tablet -f`
+
+**Opstartsbillede:** I stedet for Raspberry Pi'ens logo viser Pi'en DTU Roadrunners-logoet med en orange statusbjælke under opstart (Plymouth-tema i `assets/plymouth/`):
+```sh
+sudo scripts/install_bootsplash.sh           # installér (bygger initramfs, ca. 1 minut)
+sudo scripts/install_bootsplash.sh restore   # tilbage til Raspberry Pi'ens
+```
 
 **Beskyt SD-kortet**, når alt er færdigt: Bilen slukker uden at lukke Pi'en ned, og det kan ødelægge SD-kortet. Slå skrivebeskyttelse til med `sudo raspi-config nonint do_overlayfs 0` og genstart. Ændringer forsvinder så ved genstart, så slå den fra igen (`do_overlayfs 1`) før I opdaterer koden.
 
